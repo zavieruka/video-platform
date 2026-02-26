@@ -24,6 +24,11 @@ type Config struct {
 	Environment string
 	LogLevel    string
 
+	// Upload Configuration
+	MaxUploadSizeMB     int
+	AllowedVideoFormats []string
+	UploadURLExpiryHrs  int
+
 	// GCP Clients (initialized after validation)
 	FirestoreClient *firestore.Client
 	StorageClient   *storage.Client
@@ -40,6 +45,9 @@ func Load() (*Config, error) {
 		Port:                getEnv("PORT", "8080"),
 		Environment:         getEnv("ENVIRONMENT", "dev"),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		MaxUploadSizeMB:     getEnvAsInt("MAX_UPLOAD_SIZE_MB", 500),
+		AllowedVideoFormats: getEnvAsSlice("ALLOWED_VIDEO_FORMATS", []string{"mp4", "mov", "avi", "mkv"}),
+		UploadURLExpiryHrs:  getEnvAsInt("UPLOAD_URL_EXPIRY_HOURS", 1),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -49,7 +57,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate checks that all required configuration is present and valid
 func (c *Config) Validate() error {
 	if c.GCPProjectID == "" {
 		return fmt.Errorf("GCP_PROJECT_ID is required")
@@ -63,18 +70,15 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("PROCESSED_BUCKET_NAME is required")
 	}
 
-	// Validate port is a valid number
 	if _, err := strconv.Atoi(c.Port); err != nil {
 		return fmt.Errorf("PORT must be a valid number: %w", err)
 	}
 
-	// Validate environment
 	validEnvs := map[string]bool{"dev": true, "staging": true, "production": true}
 	if !validEnvs[c.Environment] {
 		return fmt.Errorf("ENVIRONMENT must be one of: dev, staging, production (got: %s)", c.Environment)
 	}
 
-	// Validate log level
 	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLogLevels[c.LogLevel] {
 		return fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error (got: %s)", c.LogLevel)
@@ -88,13 +92,11 @@ func (c *Config) Validate() error {
 func (c *Config) InitializeGCPClients(ctx context.Context) error {
 	var err error
 
-	// Initialize Firestore client with specified database
-	c.FirestoreClient, err = firestore.NewClientWithDatabase(ctx, c.GCPProjectID, c.FirestoreDatabaseID)
+	c.FirestoreClient, err = firestore.NewClient(ctx, c.GCPProjectID)
 	if err != nil {
-		return fmt.Errorf("failed to create Firestore client for database '%s': %w", c.FirestoreDatabaseID, err)
+		return fmt.Errorf("failed to create Firestore client: %w", err)
 	}
 
-	// Initialize Cloud Storage client
 	c.StorageClient, err = storage.NewClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create Storage client: %w", err)
@@ -126,17 +128,14 @@ func (c *Config) Close() error {
 	return nil
 }
 
-// IsDevelopment returns true if running in development mode
 func (c *Config) IsDevelopment() bool {
 	return c.Environment == "dev"
 }
 
-// IsProduction returns true if running in production mode
 func (c *Config) IsProduction() bool {
 	return c.Environment == "production"
 }
 
-// GetAddress returns the full address the server should listen on
 func (c *Config) GetAddress() string {
 	return fmt.Sprintf(":%s", c.Port)
 }
@@ -147,4 +146,75 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getEnvAsInt gets an environment variable as int with a fallback default value
+func getEnvAsInt(key string, defaultValue int) int {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
+// getEnvAsSlice gets an environment variable as a comma-separated slice
+func getEnvAsSlice(key string, defaultValue []string) []string {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+	parts := make([]string, 0)
+	for _, part := range splitAndTrim(valueStr, ",") {
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	if len(parts) == 0 {
+		return defaultValue
+	}
+	return parts
+}
+
+func splitAndTrim(s string, sep string) []string {
+	parts := make([]string, 0)
+	for _, part := range splitString(s, sep) {
+		trimmed := trimSpace(part)
+		parts = append(parts, trimmed)
+	}
+	return parts
+}
+
+func splitString(s string, sep string) []string {
+	if s == "" {
+		return []string{}
+	}
+	result := []string{}
+	current := ""
+	for i := 0; i < len(s); i++ {
+		if i+len(sep) <= len(s) && s[i:i+len(sep)] == sep {
+			result = append(result, current)
+			current = ""
+			i += len(sep) - 1
+		} else {
+			current += string(s[i])
+		}
+	}
+	result = append(result, current)
+	return result
+}
+
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	return s[start:end]
 }
