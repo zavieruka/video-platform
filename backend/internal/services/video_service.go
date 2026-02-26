@@ -79,7 +79,7 @@ func (s *VideoServiceImpl) RequestUploadURL(ctx context.Context, req *models.Upl
 		FileSize:           req.FileSize,
 		MimeType:           req.MimeType,
 		Status:             models.StatusPending,
-		StorageURL:         s.storage.(*storage.GCSVideoStorage).GetStorageURL(objectName),
+		StorageURL:         s.storage.GetStorageURL(objectName),
 		PublicURL:          s.storage.GetPublicURL(objectName),
 		UploadURLExpiresAt: expiresAt,
 		UploadedBy:         "", // Will be set when auth is implemented

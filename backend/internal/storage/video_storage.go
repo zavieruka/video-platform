@@ -15,6 +15,7 @@ type VideoStorage interface {
 	GetFileSize(ctx context.Context, objectName string) (int64, error)
 	DeleteFile(ctx context.Context, objectName string) error
 	GetPublicURL(objectName string) string
+	GetStorageURL(objectName string) string
 }
 
 type GCSVideoStorage struct {
