@@ -14,7 +14,6 @@ import (
 	"github.com/zavieruka/video-platform/backend/internal/validation"
 )
 
-// VideoService defines the interface for video business logic
 type VideoService interface {
 	RequestUploadURL(ctx context.Context, req *models.UploadURLRequest) (*models.UploadURLResponse, error)
 	ConfirmUpload(ctx context.Context, videoID string, req *models.ConfirmUploadRequest) (*models.Video, error)
@@ -23,7 +22,6 @@ type VideoService interface {
 	ListVideos(ctx context.Context, limit, offset int) (*models.VideoListResponse, error)
 }
 
-// VideoServiceImpl implements VideoService
 type VideoServiceImpl struct {
 	repository      database.VideoRepository
 	storage         storage.VideoStorage
@@ -31,7 +29,6 @@ type VideoServiceImpl struct {
 	uploadExpiryHrs int
 }
 
-// NewVideoService creates a new video service
 func NewVideoService(
 	repository database.VideoRepository,
 	storage storage.VideoStorage,
@@ -46,17 +43,13 @@ func NewVideoService(
 	}
 }
 
-// RequestUploadURL generates a signed upload URL and creates a pending video record
 func (s *VideoServiceImpl) RequestUploadURL(ctx context.Context, req *models.UploadURLRequest) (*models.UploadURLResponse, error) {
-	// Validate request
 	if err := s.validator.ValidateUploadRequest(req); err != nil {
 		return nil, err
 	}
 
-	// Generate unique video ID
 	videoID := uuid.New().String()
 
-	// Generate object name with UUID and original extension
 	ext := filepath.Ext(req.FileName)
 	objectName := fmt.Sprintf("videos/%s%s", videoID, ext)
 
@@ -67,7 +60,6 @@ func (s *VideoServiceImpl) RequestUploadURL(ctx context.Context, req *models.Upl
 		return nil, err
 	}
 
-	// Create pending video record
 	now := time.Now().UTC()
 	expiresAt := now.Add(expiryDuration)
 
@@ -92,7 +84,6 @@ func (s *VideoServiceImpl) RequestUploadURL(ctx context.Context, req *models.Upl
 		return nil, err
 	}
 
-	// Return response
 	response := &models.UploadURLResponse{
 		VideoID:   videoID,
 		UploadURL: uploadURL,
@@ -109,9 +100,7 @@ func (s *VideoServiceImpl) RequestUploadURL(ctx context.Context, req *models.Upl
 	return response, nil
 }
 
-// ConfirmUpload verifies the file was uploaded and updates the video status
 func (s *VideoServiceImpl) ConfirmUpload(ctx context.Context, videoID string, req *models.ConfirmUploadRequest) (*models.Video, error) {
-	// Get the video record
 	video, err := s.repository.GetByID(ctx, videoID)
 	if err != nil {
 		return nil, err
@@ -126,17 +115,13 @@ func (s *VideoServiceImpl) ConfirmUpload(ctx context.Context, videoID string, re
 	if time.Now().UTC().After(video.UploadURLExpiresAt) {
 		errorMsg := "Upload URL has expired"
 		if updateErr := s.repository.UpdateStatus(ctx, videoID, models.StatusFailed, &errorMsg); updateErr != nil {
-			// Log but don't fail
 			fmt.Printf("Failed to update status to failed: %v\n", updateErr)
 		}
 		return nil, errors.NewBadRequestError("Upload URL has expired. Please request a new upload URL.")
 	}
 
-	// Extract object name from storage URL
-	// Format: gs://bucket/videos/uuid.ext
 	objectName := video.StorageURL[len(fmt.Sprintf("gs://%s/", s.getBucketNameFromStorageURL(video.StorageURL))):]
 
-	// Verify file exists in Cloud Storage
 	exists, err := s.storage.FileExists(ctx, objectName)
 	if err != nil {
 		return nil, err
@@ -158,12 +143,10 @@ func (s *VideoServiceImpl) ConfirmUpload(ctx context.Context, videoID string, re
 		return nil, errors.NewBadRequestError(errorMsg)
 	}
 
-	// Update status to uploaded
 	if err := s.repository.UpdateStatus(ctx, videoID, models.StatusUploaded, nil); err != nil {
 		return nil, err
 	}
 
-	// Retrieve updated video
 	video, err = s.repository.GetByID(ctx, videoID)
 	if err != nil {
 		return nil, err

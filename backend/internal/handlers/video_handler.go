@@ -10,19 +10,16 @@ import (
 	"github.com/zavieruka/video-platform/backend/internal/services"
 )
 
-// VideoHandler handles video-related HTTP requests
 type VideoHandler struct {
 	videoService services.VideoService
 }
 
-// NewVideoHandler creates a new video handler
 func NewVideoHandler(videoService services.VideoService) *VideoHandler {
 	return &VideoHandler{
 		videoService: videoService,
 	}
 }
 
-// RequestUploadURL handles POST /api/v1/videos/upload-url
 func (h *VideoHandler) RequestUploadURL(w http.ResponseWriter, r *http.Request) {
 	var req models.UploadURLRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

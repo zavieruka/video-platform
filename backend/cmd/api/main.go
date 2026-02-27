@@ -48,7 +48,7 @@ func main() {
 	log.Println("GCP clients initialized successfully")
 
 	// Initialize services
-	videoStorage := storage.NewGCSVideoStorage(cfg.StorageClient, cfg.SourceBucketName)
+	videoStorage := storage.NewGCSVideoStorage(cfg.StorageClient, cfg.SourceBucketName, cfg.ServiceAccountEmail)
 	videoRepository := database.NewFirestoreVideoRepository(cfg.FirestoreClient)
 	videoValidator := validation.NewVideoValidator(cfg.MaxUploadSizeMB, cfg.AllowedVideoFormats)
 	videoService := services.NewVideoService(videoRepository, videoStorage, videoValidator, cfg.UploadURLExpiryHrs)

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	iamcredentials "cloud.google.com/go/iam/credentials/apiv1"
+	credentialspb "google.golang.org/genproto/googleapis/iam/credentials/v1"
+
 	"cloud.google.com/go/storage"
 	"github.com/zavieruka/video-platform/backend/internal/errors"
 )
@@ -19,30 +22,57 @@ type VideoStorage interface {
 }
 
 type GCSVideoStorage struct {
-	client     *storage.Client
-	bucketName string
+	client              *storage.Client
+	bucketName          string
+	serviceAccountEmail string
 }
 
-func NewGCSVideoStorage(client *storage.Client, bucketName string) *GCSVideoStorage {
+func NewGCSVideoStorage(client *storage.Client, bucketName string, serviceAccountEmail string) *GCSVideoStorage {
 	return &GCSVideoStorage{
-		client:     client,
-		bucketName: bucketName,
+		client:              client,
+		bucketName:          bucketName,
+		serviceAccountEmail: serviceAccountEmail,
 	}
 }
 
-func (s *GCSVideoStorage) GenerateSignedUploadURL(ctx context.Context, objectName string, mimeType string, expiryDuration time.Duration) (string, error) {
-	bucket := s.client.Bucket(s.bucketName)
+func (s *GCSVideoStorage) GenerateSignedUploadURL(
+	ctx context.Context,
+	objectName string,
+	mimeType string,
+	expiryDuration time.Duration,
+) (string, error) {
+
+	iamClient, err := iamcredentials.NewIamCredentialsClient(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	signBytes := func(b []byte) ([]byte, error) {
+		req := &credentialspb.SignBlobRequest{
+			Name:    "projects/-/serviceAccounts/" + s.serviceAccountEmail,
+			Payload: b,
+		}
+
+		resp, err := iamClient.SignBlob(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		return resp.SignedBlob, nil
+	}
 
 	opts := &storage.SignedURLOptions{
-		Scheme:      storage.SigningSchemeV4,
-		Method:      "PUT",
-		Expires:     time.Now().Add(expiryDuration),
-		ContentType: mimeType,
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "PUT",
+		Expires:        time.Now().Add(expiryDuration),
+		ContentType:    mimeType,
+		GoogleAccessID: s.serviceAccountEmail,
+		SignBytes:      signBytes,
 	}
 
-	url, err := bucket.SignedURL(objectName, opts)
+	url, err := storage.SignedURL(s.bucketName, objectName, opts)
 	if err != nil {
-		return "", errors.NewStorageError("Failed to generate signed upload URL", err)
+		return "", err
 	}
 
 	return url, nil

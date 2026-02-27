@@ -18,6 +18,7 @@ type Config struct {
 	FirestoreDatabaseID string
 	SourceBucketName    string
 	ProcessedBucketName string
+	ServiceAccountEmail string
 
 	// Application Configuration
 	Port        string
@@ -42,6 +43,7 @@ func Load() (*Config, error) {
 		FirestoreDatabaseID: getEnv("FIRESTORE_DATABASE_ID", "(default)"),
 		SourceBucketName:    getEnv("SOURCE_BUCKET_NAME", ""),
 		ProcessedBucketName: getEnv("PROCESSED_BUCKET_NAME", ""),
+		ServiceAccountEmail: getEnv("SERVICE_ACCOUNT_EMAIL", ""),
 		Port:                getEnv("PORT", "8080"),
 		Environment:         getEnv("ENVIRONMENT", "dev"),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
@@ -68,6 +70,10 @@ func (c *Config) Validate() error {
 
 	if c.ProcessedBucketName == "" {
 		return fmt.Errorf("PROCESSED_BUCKET_NAME is required")
+	}
+
+	if c.ServiceAccountEmail == "" {
+		return fmt.Errorf("SERVICE_ACCOUNT_EMAIL is required")
 	}
 
 	if _, err := strconv.Atoi(c.Port); err != nil {
