@@ -20,6 +20,7 @@ type VideoService interface {
 	FailUpload(ctx context.Context, videoID string, req *models.FailUploadRequest) (*models.FailUploadResponse, error)
 	GetVideo(ctx context.Context, videoID string) (*models.Video, error)
 	ListVideos(ctx context.Context, limit, offset int) (*models.VideoListResponse, error)
+	DeleteVideo(ctx context.Context, videoID string) error
 }
 
 type VideoServiceImpl struct {
@@ -157,7 +158,6 @@ func (s *VideoServiceImpl) ConfirmUpload(ctx context.Context, videoID string, re
 	return video, nil
 }
 
-// FailUpload marks an upload as failed
 func (s *VideoServiceImpl) FailUpload(ctx context.Context, videoID string, req *models.FailUploadRequest) (*models.FailUploadResponse, error) {
 	// Get the video record
 	video, err := s.repository.GetByID(ctx, videoID)
@@ -188,12 +188,10 @@ func (s *VideoServiceImpl) FailUpload(ctx context.Context, videoID string, req *
 	return response, nil
 }
 
-// GetVideo retrieves a video by ID
 func (s *VideoServiceImpl) GetVideo(ctx context.Context, videoID string) (*models.Video, error) {
 	return s.repository.GetByID(ctx, videoID)
 }
 
-// ListVideos retrieves a paginated list of videos
 func (s *VideoServiceImpl) ListVideos(ctx context.Context, limit, offset int) (*models.VideoListResponse, error) {
 	// Set default and max limits
 	if limit <= 0 {
@@ -227,18 +225,37 @@ func (s *VideoServiceImpl) ListVideos(ctx context.Context, limit, offset int) (*
 	return response, nil
 }
 
-// Helper method to extract bucket name from storage URL
-func (s *VideoServiceImpl) getBucketNameFromStorageURL(storageURL string) string {
-	// Extract bucket name from gs://bucket/path format
-	const prefix = "gs://"
-	if len(storageURL) <= len(prefix) {
-		return ""
+func (s *VideoServiceImpl) DeleteVideo(ctx context.Context, videoID string) error {
+	video, err := s.repository.GetByID(ctx, videoID)
+	if errors.IsNotFound(err) {
+		return nil
 	}
-	path := storageURL[len(prefix):]
-	for i, c := range path {
-		if c == '/' {
-			return path[:i]
+	if err != nil {
+		return err
+	}
+
+	switch video.Status {
+
+	case models.StatusProcessing:
+		return fmt.Errorf("Cannot delete video while processing")
+
+	case models.StatusPending:
+		// No object exists yet - safe
+
+	case models.StatusUploaded:
+		if err := s.storage.DeleteFile(ctx, video.ObjectName); err != nil {
+			return fmt.Errorf("failed to delete storage object: %w", err)
 		}
+
+	case models.StatusReady:
+		// TODO: delete processed artifacts
+
+	case models.StatusFailed:
+		_ = s.storage.DeleteFile(ctx, video.ObjectName)
+
+	default:
+		return fmt.Errorf("unsupported status: %s", video.Status)
 	}
-	return path
+
+	return s.repository.Delete(ctx, videoID)
 }

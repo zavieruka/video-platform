@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -90,4 +91,11 @@ func NewBadRequestError(message string) *AppError {
 		Message:    message,
 		StatusCode: http.StatusBadRequest,
 	}
+}
+
+func IsNotFound(err error) bool {
+	if appErr, ok := errors.AsType[*AppError](err); ok {
+		return appErr.Code == "not_found"
+	}
+	return false
 }

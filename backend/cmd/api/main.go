@@ -72,6 +72,7 @@ func main() {
 	mux.HandleFunc("POST /api/v1/videos/{id}/fail", videoHandler.FailUpload)
 	mux.HandleFunc("GET /api/v1/videos/{id}", videoHandler.GetVideo)
 	mux.HandleFunc("GET /api/v1/videos", videoHandler.ListVideos)
+	mux.HandleFunc("DELETE /api/v1/videos/{id}", videoHandler.DeleteVideo)
 
 	// Root endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

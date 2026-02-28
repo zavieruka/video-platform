@@ -141,3 +141,18 @@ func (h *VideoHandler) respondError(w http.ResponseWriter, err error) {
 
 	h.respondJSON(w, appErr.StatusCode, appErr)
 }
+
+func (h *VideoHandler) DeleteVideo(w http.ResponseWriter, r *http.Request) {
+	videoID := r.PathValue("id")
+	if videoID == "" {
+		h.respondError(w, errors.NewBadRequestError("Video ID is required"))
+		return
+	}
+
+	if err := h.videoService.DeleteVideo(r.Context(), videoID); err != nil {
+		h.respondError(w, err)
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]string{"message": "Video deleted successfully"})
+}
