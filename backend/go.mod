@@ -12,7 +12,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	google.golang.org/api v0.269.0
 	google.golang.org/genproto v0.0.0-20260223185530-2f722ef697dc
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 require (
