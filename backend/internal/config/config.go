@@ -30,7 +30,16 @@ type Config struct {
 	AllowedVideoFormats []string
 	UploadURLExpiryHrs  int
 
-	// GCP Clients (initialized after validation)
+	// Pub/Sub Configuration
+	PubSubVideoUploadedTopic      string
+	PubSubProcessingCompleteTopic string
+	EnableAutoProcessing          bool
+
+	// Transcoder Configuration
+	TranscoderLocation   string
+	TranscoderTemplateID string
+
+	// GCP Clients
 	FirestoreClient *firestore.Client
 	StorageClient   *storage.Client
 }
@@ -38,18 +47,23 @@ type Config struct {
 // Load reads configuration from environment variables and validates them
 func Load() (*Config, error) {
 	cfg := &Config{
-		GCPProjectID:        getEnv("GCP_PROJECT_ID", ""),
-		GCPRegion:           getEnv("GCP_REGION", "us-central1"),
-		FirestoreDatabaseID: getEnv("FIRESTORE_DATABASE_ID", "(default)"),
-		SourceBucketName:    getEnv("SOURCE_BUCKET_NAME", ""),
-		ProcessedBucketName: getEnv("PROCESSED_BUCKET_NAME", ""),
-		ServiceAccountEmail: getEnv("SERVICE_ACCOUNT_EMAIL", ""),
-		Port:                getEnv("PORT", "8080"),
-		Environment:         getEnv("ENVIRONMENT", "dev"),
-		LogLevel:            getEnv("LOG_LEVEL", "info"),
-		MaxUploadSizeMB:     getEnvAsInt("MAX_UPLOAD_SIZE_MB", 500),
-		AllowedVideoFormats: getEnvAsSlice("ALLOWED_VIDEO_FORMATS", []string{"mp4", "mov", "avi", "mkv"}),
-		UploadURLExpiryHrs:  getEnvAsInt("UPLOAD_URL_EXPIRY_HOURS", 1),
+		GCPProjectID:                  getEnv("GCP_PROJECT_ID", ""),
+		GCPRegion:                     getEnv("GCP_REGION", "us-central1"),
+		ServiceAccountEmail:           getEnv("SERVICE_ACCOUNT_EMAIL", ""),
+		FirestoreDatabaseID:           getEnv("FIRESTORE_DATABASE_ID", "(default)"),
+		SourceBucketName:              getEnv("SOURCE_BUCKET_NAME", ""),
+		ProcessedBucketName:           getEnv("PROCESSED_BUCKET_NAME", ""),
+		Port:                          getEnv("PORT", "8080"),
+		Environment:                   getEnv("ENVIRONMENT", "dev"),
+		LogLevel:                      getEnv("LOG_LEVEL", "info"),
+		MaxUploadSizeMB:               getEnvAsInt("MAX_UPLOAD_SIZE_MB", 500),
+		AllowedVideoFormats:           getEnvAsSlice("ALLOWED_VIDEO_FORMATS", []string{"mp4", "mov", "avi", "mkv"}),
+		UploadURLExpiryHrs:            getEnvAsInt("UPLOAD_URL_EXPIRY_HOURS", 1),
+		PubSubVideoUploadedTopic:      getEnv("PUBSUB_VIDEO_UPLOADED_TOPIC", "video-uploaded"),
+		PubSubProcessingCompleteTopic: getEnv("PUBSUB_VIDEO_PROCESSING_COMPLETE_TOPIC", "video-processing-complete"),
+		EnableAutoProcessing:          getEnvAsBool("ENABLE_AUTO_PROCESSING", true),
+		TranscoderLocation:            getEnv("TRANSCODER_LOCATION", "us-central1"),
+		TranscoderTemplateID:          getEnv("TRANSCODER_TEMPLATE_ID", "hls-adaptive-template"),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -162,7 +176,6 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvAsInt gets an environment variable as int with a fallback default value
 func getEnvAsInt(key string, defaultValue int) int {
 	valueStr := os.Getenv(key)
 	if valueStr == "" {
@@ -175,7 +188,18 @@ func getEnvAsInt(key string, defaultValue int) int {
 	return value
 }
 
-// getEnvAsSlice gets an environment variable as a comma-separated slice
+func getEnvAsBool(key string, defaultValue bool) bool {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
+	value, err := strconv.ParseBool(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
 func getEnvAsSlice(key string, defaultValue []string) []string {
 	valueStr := os.Getenv(key)
 	if valueStr == "" {

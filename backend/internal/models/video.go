@@ -28,6 +28,21 @@ type Video struct {
 	CreatedAt          time.Time   `firestore:"createdAt"`
 	UpdatedAt          time.Time   `firestore:"updatedAt"`
 	LastError          *string     `firestore:"lastError,omitempty"`
+
+	ProcessingJobID     *string                   `firestore:"processingJobId,omitempty"`
+	ProcessedVideos     map[string]ProcessedVideo `firestore:"processedVideos,omitempty"`
+	ProcessingStartedAt *time.Time                `firestore:"processingStartedAt,omitempty"`
+	ProcessingEndedAt   *time.Time                `firestore:"processingEndedAt,omitempty"`
+	DurationSeconds     int                       `firestore:"durationSeconds,omitempty"`
+	ManifestURL         *string                   `firestore:"manifestUrl,omitempty"`
+}
+
+type ProcessedVideo struct {
+	Resolution string `firestore:"resolution" json:"resolution"`
+	StorageURL string `firestore:"storageUrl" json:"storageUrl"`
+	PublicURL  string `firestore:"publicUrl" json:"publicUrl"`
+	FileSize   int64  `firestore:"fileSize" json:"fileSize"`
+	Bitrate    int    `firestore:"bitrate" json:"bitrate"`
 }
 
 // Request Types
@@ -79,6 +94,25 @@ type VideoResponse struct {
 	UpdatedAt   time.Time   `json:"updatedAt"`
 	URLs        VideoURLs   `json:"urls"`
 	LastError   *string     `json:"lastError,omitempty"`
+
+	ProcessingStatus *ProcessingStatus        `json:"processingStatus,omitempty"`
+	ProcessedVideos  []ProcessedVideoResponse `json:"processedVideos,omitempty"`
+	ManifestURL      *string                  `json:"manifestUrl,omitempty"`
+	DurationSeconds  int                      `json:"durationSeconds,omitempty"`
+}
+
+type ProcessingStatus struct {
+	JobID           string     `json:"jobId"`
+	StartedAt       time.Time  `json:"startedAt"`
+	EndedAt         *time.Time `json:"endedAt,omitempty"`
+	DurationSeconds float64    `json:"durationSeconds,omitempty"`
+}
+
+type ProcessedVideoResponse struct {
+	Resolution string `json:"resolution"`
+	URL        string `json:"url"`
+	FileSize   int64  `json:"fileSize"`
+	Bitrate    int    `json:"bitrate"`
 }
 
 type VideoURLs struct {
@@ -100,7 +134,7 @@ type FailUploadResponse struct {
 }
 
 func (v *Video) ToResponse() *VideoResponse {
-	return &VideoResponse{
+	response := &VideoResponse{
 		ID:          v.ID,
 		Title:       v.Title,
 		Description: v.Description,
@@ -114,6 +148,38 @@ func (v *Video) ToResponse() *VideoResponse {
 			Storage: v.StorageURL,
 			Public:  v.PublicURL,
 		},
-		LastError: v.LastError,
+		LastError:       v.LastError,
+		DurationSeconds: v.DurationSeconds,
+		ManifestURL:     v.ManifestURL,
 	}
+
+	if v.ProcessingJobID != nil && v.ProcessingStartedAt != nil {
+		processingStatus := &ProcessingStatus{
+			JobID:     *v.ProcessingJobID,
+			StartedAt: *v.ProcessingStartedAt,
+			EndedAt:   v.ProcessingEndedAt,
+		}
+
+		if v.ProcessingEndedAt != nil {
+			duration := v.ProcessingEndedAt.Sub(*v.ProcessingStartedAt).Seconds()
+			processingStatus.DurationSeconds = duration
+		}
+
+		response.ProcessingStatus = processingStatus
+	}
+
+	if len(v.ProcessedVideos) > 0 {
+		processedVideos := make([]ProcessedVideoResponse, 0, len(v.ProcessedVideos))
+		for _, pv := range v.ProcessedVideos {
+			processedVideos = append(processedVideos, ProcessedVideoResponse{
+				Resolution: pv.Resolution,
+				URL:        pv.PublicURL,
+				FileSize:   pv.FileSize,
+				Bitrate:    pv.Bitrate,
+			})
+		}
+		response.ProcessedVideos = processedVideos
+	}
+
+	return response
 }

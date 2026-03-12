@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/zavieruka/video-platform/backend/internal/errors"
@@ -18,6 +19,9 @@ type VideoRepository interface {
 	UpdateStatus(ctx context.Context, id string, status models.VideoStatus, errorMsg *string) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, limit int, offset int) ([]*models.Video, int, error)
+	UpdateProcessingJobID(ctx context.Context, id string, jobID string) error
+	UpdateProcessingStatus(ctx context.Context, id string, status models.VideoStatus, startedAt, endedAt *time.Time) error
+	UpdateProcessedVideos(ctx context.Context, id string, processedVideos map[string]models.ProcessedVideo, manifestURL string, endedAt *time.Time) error
 }
 
 type FirestoreVideoRepository struct {
@@ -128,4 +132,59 @@ func (r *FirestoreVideoRepository) List(ctx context.Context, limit int, offset i
 	}
 
 	return videos, totalCount, nil
+}
+
+func (r *FirestoreVideoRepository) UpdateProcessingJobID(ctx context.Context, id string, jobID string) error {
+	_, err := r.client.Collection(videosCollection).Doc(id).Update(ctx, []firestore.Update{
+		{Path: "processingJobId", Value: jobID},
+		{Path: "updatedAt", Value: firestore.ServerTimestamp},
+	})
+
+	if err != nil {
+		return errors.NewDatabaseError("Failed to update processing job ID", err)
+	}
+
+	return nil
+}
+
+func (r *FirestoreVideoRepository) UpdateProcessingStatus(ctx context.Context, id string, status models.VideoStatus, startedAt, endedAt *time.Time) error {
+	updates := []firestore.Update{
+		{Path: "status", Value: status},
+		{Path: "updatedAt", Value: firestore.ServerTimestamp},
+	}
+
+	if startedAt != nil {
+		updates = append(updates, firestore.Update{Path: "processingStartedAt", Value: *startedAt})
+	}
+
+	if endedAt != nil {
+		updates = append(updates, firestore.Update{Path: "processingEndedAt", Value: *endedAt})
+	}
+
+	_, err := r.client.Collection(videosCollection).Doc(id).Update(ctx, updates)
+	if err != nil {
+		return errors.NewDatabaseError("Failed to update processing status", err)
+	}
+
+	return nil
+}
+
+func (r *FirestoreVideoRepository) UpdateProcessedVideos(ctx context.Context, id string, processedVideos map[string]models.ProcessedVideo, manifestURL string, endedAt *time.Time) error {
+	updates := []firestore.Update{
+		{Path: "processedVideos", Value: processedVideos},
+		{Path: "manifestUrl", Value: manifestURL},
+		{Path: "updatedAt", Value: firestore.ServerTimestamp},
+	}
+
+	if endedAt != nil {
+		updates = append(updates, firestore.Update{Path: "processingEndedAt", Value: *endedAt})
+	}
+
+	_, err := r.client.Collection(videosCollection).Doc(id).Update(ctx, updates)
+
+	if err != nil {
+		return errors.NewDatabaseError("Failed to update processed videos", err)
+	}
+
+	return nil
 }

@@ -127,7 +127,11 @@ func (h *VideoHandler) ListVideos(w http.ResponseWriter, r *http.Request) {
 func (h *VideoHandler) respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
+
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+
+	if err := encoder.Encode(data); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }

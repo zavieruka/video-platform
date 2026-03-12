@@ -14,6 +14,8 @@ import (
 	"github.com/zavieruka/video-platform/backend/internal/config"
 	"github.com/zavieruka/video-platform/backend/internal/database"
 	"github.com/zavieruka/video-platform/backend/internal/handlers"
+	"github.com/zavieruka/video-platform/backend/internal/middleware"
+	"github.com/zavieruka/video-platform/backend/internal/pubsub"
 	"github.com/zavieruka/video-platform/backend/internal/services"
 	"github.com/zavieruka/video-platform/backend/internal/storage"
 	"github.com/zavieruka/video-platform/backend/internal/validation"
@@ -47,11 +49,39 @@ func main() {
 
 	log.Println("GCP clients initialized successfully")
 
+	// Initialize Pub/Sub publisher
+	var publisher *pubsub.Publisher
+	if cfg.EnableAutoProcessing {
+		var err error
+		publisher, err = pubsub.NewPublisher(ctx, cfg.GCPProjectID, map[string]string{
+			"video-uploaded":      cfg.PubSubVideoUploadedTopic,
+			"processing-complete": cfg.PubSubProcessingCompleteTopic,
+		})
+		if err != nil {
+			log.Printf("Warning: Failed to initialize Pub/Sub publisher: %v", err)
+			log.Println("Auto-processing will be disabled. Videos can still be uploaded.")
+			publisher = nil
+		} else {
+			log.Println("Pub/Sub publisher initialized successfully")
+			defer publisher.Close()
+		}
+	} else {
+		log.Println("Auto-processing is disabled")
+	}
+
 	// Initialize services
 	videoStorage := storage.NewGCSVideoStorage(cfg.StorageClient, cfg.SourceBucketName, cfg.ServiceAccountEmail)
 	videoRepository := database.NewFirestoreVideoRepository(cfg.FirestoreClient)
 	videoValidator := validation.NewVideoValidator(cfg.MaxUploadSizeMB, cfg.AllowedVideoFormats)
-	videoService := services.NewVideoService(videoRepository, videoStorage, videoValidator, cfg.UploadURLExpiryHrs)
+	videoService := services.NewVideoService(
+		videoRepository,
+		videoStorage,
+		videoValidator,
+		cfg.UploadURLExpiryHrs,
+		publisher,
+		cfg.SourceBucketName,
+		cfg.EnableAutoProcessing,
+	)
 
 	// Initialize handlers
 	healthHandler := handlers.NewHealthHandler(cfg)
@@ -83,9 +113,10 @@ func main() {
 		fmt.Fprintf(w, "Video Platform API - v0.1.0\n")
 	})
 
+	handler := middleware.LoggingMiddleware(middleware.RecoveryMiddleware(mux))
 	server := &http.Server{
 		Addr:         cfg.GetAddress(),
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

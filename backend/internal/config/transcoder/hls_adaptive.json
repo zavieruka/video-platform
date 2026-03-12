@@ -1,0 +1,107 @@
+{
+  "config": {
+    "elementaryStreams": [
+      {
+        "key": "video-1080p",
+        "videoStream": {
+          "h264": {
+            "widthPixels": 1920,
+            "heightPixels": 1080,
+            "bitrateBps": 5000000,
+            "frameRate": 30,
+            "pixelFormat": "yuv420p",
+            "rateControlMode": "vbr",
+            "crfLevel": 21,
+            "preset": "veryfast",
+            "profile": "high",
+            "bFrameCount": 3
+          }
+        }
+      },
+      {
+        "key": "video-720p",
+        "videoStream": {
+          "h264": {
+            "widthPixels": 1280,
+            "heightPixels": 720,
+            "bitrateBps": 2500000,
+            "frameRate": 30,
+            "pixelFormat": "yuv420p",
+            "rateControlMode": "vbr",
+            "crfLevel": 21,
+            "preset": "veryfast",
+            "profile": "high",
+            "bFrameCount": 3
+          }
+        }
+      },
+      {
+        "key": "video-480p",
+        "videoStream": {
+          "h264": {
+            "widthPixels": 854,
+            "heightPixels": 480,
+            "bitrateBps": 1000000,
+            "frameRate": 30,
+            "pixelFormat": "yuv420p",
+            "rateControlMode": "vbr",
+            "crfLevel": 21,
+            "preset": "veryfast",
+            "profile": "main",
+            "bFrameCount": 3
+          }
+        }
+      },
+      {
+        "key": "audio",
+        "audioStream": {
+          "codec": "aac",
+          "bitrateBps": 128000,
+          "channelCount": 2,
+          "sampleRateHertz": 48000
+        }
+      }
+    ],
+    "muxStreams": [
+      {
+        "key": "video-1080p",
+        "container": "fmp4",
+        "elementaryStreams": ["video-1080p"],
+        "segmentSettings": {
+          "segmentDuration": "6s"
+        }
+      },
+      {
+        "key": "video-720p",
+        "container": "fmp4",
+        "elementaryStreams": ["video-720p"],
+        "segmentSettings": {
+          "segmentDuration": "6s"
+        }
+      },
+      {
+        "key": "video-480p",
+        "container": "fmp4",
+        "elementaryStreams": ["video-480p"],
+        "segmentSettings": {
+          "segmentDuration": "6s"
+        }
+      },
+      {
+        "key": "audio",
+        "container": "fmp4",
+        "elementaryStreams": ["audio"],
+        "segmentSettings": {
+          "segmentDuration": "6s"
+        }
+      }
+    ],
+    "manifests": [
+      {
+        "fileName": "manifest.m3u8",
+        "type": "HLS",
+        "muxStreams": ["video-1080p", "video-720p", "video-480p", "audio"]
+      }
+    ]
+  }
+}
