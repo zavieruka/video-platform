@@ -11,9 +11,7 @@ import (
 	"github.com/zavieruka/video-platform/backend/internal/database"
 	"github.com/zavieruka/video-platform/backend/internal/errors"
 	"github.com/zavieruka/video-platform/backend/internal/models"
-	"github.com/zavieruka/video-platform/backend/internal/pubsub"
 	"github.com/zavieruka/video-platform/backend/internal/storage"
-	"github.com/zavieruka/video-platform/backend/internal/validation"
 )
 
 type VideoService interface {
@@ -25,12 +23,22 @@ type VideoService interface {
 	DeleteVideo(ctx context.Context, videoID string) error
 }
 
+type Validator interface {
+	ValidateUploadRequest(req *models.UploadURLRequest) *errors.AppError
+}
+
+type Publisher interface {
+	PublishVideoUploaded(ctx context.Context, event *models.VideoUploadedEvent) error
+	PublishProcessingComplete(ctx context.Context, event *models.VideoProcessingCompleteEvent) error
+	Close() error
+}
+
 type VideoServiceImpl struct {
 	repository        database.VideoRepository
 	storage           storage.VideoStorage
-	validator         *validation.VideoValidator
+	validator         Validator
 	uploadExpiryHrs   int
-	publisher         *pubsub.Publisher
+	publisher         Publisher
 	sourceBucket      string
 	enableAutoProcess bool
 }
@@ -38,9 +46,9 @@ type VideoServiceImpl struct {
 func NewVideoService(
 	repository database.VideoRepository,
 	storage storage.VideoStorage,
-	validator *validation.VideoValidator,
+	validator Validator,
 	uploadExpiryHrs int,
-	publisher *pubsub.Publisher,
+	publisher Publisher,
 	sourceBucket string,
 	enableAutoProcess bool,
 ) *VideoServiceImpl {
@@ -253,12 +261,11 @@ func (s *VideoServiceImpl) DeleteVideo(ctx context.Context, videoID string) erro
 	}
 
 	switch video.Status {
-
 	case models.StatusProcessing:
-		return fmt.Errorf("Cannot delete video while processing")
+		return fmt.Errorf("cannot delete video while processing")
 
 	case models.StatusPending:
-		// No object exists yet - safe
+		// No object exists yet
 
 	case models.StatusUploaded:
 		if err := s.storage.DeleteFile(ctx, video.ObjectName); err != nil {
@@ -266,7 +273,10 @@ func (s *VideoServiceImpl) DeleteVideo(ctx context.Context, videoID string) erro
 		}
 
 	case models.StatusReady:
-		// TODO: delete processed artifacts
+		// TODO: delete processed artifacts when transcoding is implemented
+		if err := s.storage.DeleteFile(ctx, video.ObjectName); err != nil {
+			return fmt.Errorf("failed to delete storage object: %w", err)
+		}
 
 	case models.StatusFailed:
 		_ = s.storage.DeleteFile(ctx, video.ObjectName)
