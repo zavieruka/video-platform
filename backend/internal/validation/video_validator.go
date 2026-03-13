@@ -19,25 +19,32 @@ type VideoValidator struct {
 func NewVideoValidator(maxUploadSizeMB int, allowedFormats []string) *VideoValidator {
 	maxSizeBytes := int64(maxUploadSizeMB) * 1024 * 1024
 
-	allowedMimeTypes := map[string]bool{
-		"video/mp4":        true,
-		"video/quicktime":  true, // .mov
-		"video/x-msvideo":  true, // .avi
-		"video/x-matroska": true, // .mkv
+	formatToMime := map[string]string{
+		"mp4": "video/mp4",
+		"mov": "video/quicktime",
+		"avi": "video/x-msvideo",
+		"mkv": "video/x-matroska",
 	}
 
-	allowedExtensions := map[string]bool{
-		".mp4": true,
-		".mov": true,
-		".avi": true,
-		".mkv": true,
-	}
+	allowedMimeTypes := make(map[string]bool)
+	allowedExtensions := make(map[string]bool)
+	mimeToExtensions := make(map[string][]string)
 
-	mimeToExtensions := map[string][]string{
-		"video/mp4":        {".mp4"},
-		"video/quicktime":  {".mov"},
-		"video/x-msvideo":  {".avi"},
-		"video/x-matroska": {".mkv"},
+	for _, format := range allowedFormats {
+		normalized := strings.ToLower(strings.TrimSpace(format))
+		if normalized == "" {
+			continue
+		}
+
+		mimeType, exists := formatToMime[normalized]
+		if !exists {
+			continue
+		}
+
+		ext := "." + normalized
+		allowedExtensions[ext] = true
+		allowedMimeTypes[mimeType] = true
+		mimeToExtensions[mimeType] = append(mimeToExtensions[mimeType], ext)
 	}
 
 	return &VideoValidator{
@@ -49,6 +56,12 @@ func NewVideoValidator(maxUploadSizeMB int, allowedFormats []string) *VideoValid
 }
 
 func (v *VideoValidator) ValidateUploadRequest(req *models.UploadURLRequest) *errors.AppError {
+	if req == nil {
+		return errors.NewValidationError("request is required", map[string]interface{}{
+			"field": "request",
+		})
+	}
+
 	if err := v.ValidateTitle(req.Title); err != nil {
 		return err
 	}
@@ -92,6 +105,8 @@ func (v *VideoValidator) ValidateTitle(title string) *errors.AppError {
 }
 
 func (v *VideoValidator) ValidateFileName(fileName string) *errors.AppError {
+	fileName = strings.TrimSpace(fileName)
+
 	if fileName == "" {
 		return errors.NewValidationError("File name is required", map[string]interface{}{
 			"field": "fileName",
@@ -108,8 +123,8 @@ func (v *VideoValidator) ValidateFileName(fileName string) *errors.AppError {
 
 	if !v.allowedExtensions[ext] {
 		allowedExts := []string{}
-		for ext := range v.allowedExtensions {
-			allowedExts = append(allowedExts, ext)
+		for allowedExt := range v.allowedExtensions {
+			allowedExts = append(allowedExts, allowedExt)
 		}
 		return errors.NewValidationError("File extension not allowed", map[string]interface{}{
 			"field":             "fileName",
@@ -166,7 +181,7 @@ func (v *VideoValidator) ValidateFileSize(size int64) *errors.AppError {
 }
 
 func (v *VideoValidator) ValidateExtensionMatchesMimeType(fileName, mimeType string) *errors.AppError {
-	ext := strings.ToLower(filepath.Ext(fileName))
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(fileName)))
 	expectedExts, exists := v.mimeToExtensions[mimeType]
 
 	if !exists {

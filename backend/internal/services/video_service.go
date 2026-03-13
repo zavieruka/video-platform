@@ -115,6 +115,7 @@ func (s *VideoServiceImpl) RequestUploadURL(ctx context.Context, req *models.Upl
 			FileSize:    req.FileSize,
 			MimeType:    req.MimeType,
 			ObjectName:  objectName,
+			Status:      models.StatusPending,
 		},
 	}
 
